@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == "faysalmolla2009@gmail.com";
+    }
+    function myEmail() { return request.auth.token.email; }
+    function myName() { return request.auth.token.email.split('@')[0]; }
+
+    // হাজিরা: কর্মচারী শুধু নিজেরটা দেখতে ও জমা দিতে পারবে। এডিট/ডিলিট শুধু অ্যাডমিন।
+    match /attendance/{id} {
+      allow read: if request.auth != null && (isAdmin() || resource.data.email == myEmail());
+      allow create: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.email == myEmail()
+                        && request.resource.data.ts == request.time);
+      allow update, delete: if isAdmin();
+    }
+
+    // প্রোফাইল (ছবি, ফোন, বেতন)
+    match /staff/{name} {
+      allow read: if request.auth != null && (isAdmin() || name == myName());
+      allow create: if isAdmin()
+                    || (request.auth != null && name == myName()
+                        && request.resource.data.keys().hasOnly(['name', 'phone', 'photo']));
+      allow update: if isAdmin()
+                    || (request.auth != null && name == myName()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'photo']));
+      allow delete: if isAdmin();
+    }
+
+    // বেতন দেওয়ার হিসাব
+    match /payments/{id} {
+      allow read: if request.auth != null && (isAdmin() || resource.data.email == myEmail());
+      allow write: if isAdmin();
+    }
+
+    // অ্যালার্ম
+    match /alarms/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // চ্যাট: গ্রুপ সবার, ব্যক্তিগত মেসেজ শুধু অ্যাডমিন ও ওই কর্মচারীর
+    match /messages/{id} {
+      allow read: if request.auth != null
+                  && (isAdmin() || resource.data.room == "group" || resource.data.peerEmail == myEmail());
+      allow create: if request.auth != null
+                    && request.resource.data.fromEmail == myEmail()
+                    && request.resource.data.ts == request.time
+                    && (isAdmin() || request.resource.data.room == "group" || request.resource.data.peerEmail == myEmail());
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+  }
+}
